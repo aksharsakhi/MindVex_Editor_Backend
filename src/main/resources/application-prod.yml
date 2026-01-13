@@ -1,10 +1,28 @@
 spring:
   datasource:
-    url: ${DATABASE_URL}
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/mindvex}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
   
   jpa:
     hibernate:
       ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+        jdbc:
+          time_zone: UTC
+  
+  # Disable Flyway for now - we're using Hibernate ddl-auto=update
+  flyway:
+    enabled: false
 
 jwt:
   secret: ${JWT_SECRET}
@@ -15,5 +33,6 @@ cors:
 logging:
   level:
     root: INFO
-    ai.mindvex: INFO
+    ai.mindvex: DEBUG
     org.springframework.security: INFO
+    org.hibernate: INFO
