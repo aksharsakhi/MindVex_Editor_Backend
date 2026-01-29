@@ -2,7 +2,6 @@ package ai.mindvex.backend.security;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
@@ -19,9 +18,16 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
 
     private final JwtService jwtService;
     private final HttpCookieOAuth2AuthorizationRequestRepository authorizationRequestRepository;
+    private final List<String> authorizedRedirectUris;
 
-    @Value("${app.oauth2.authorized-redirect-uris}")
-    private List<String> authorizedRedirectUris;
+    public OAuth2AuthenticationSuccessHandler(
+            JwtService jwtService,
+            HttpCookieOAuth2AuthorizationRequestRepository authorizationRequestRepository,
+            @Value("${app.oauth2.authorized-redirect-uris}") List<String> authorizedRedirectUris) {
+        this.jwtService = jwtService;
+        this.authorizationRequestRepository = authorizationRequestRepository;
+        this.authorizedRedirectUris = authorizedRedirectUris;
+    }
 
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request,
