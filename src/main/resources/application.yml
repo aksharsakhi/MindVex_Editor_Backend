@@ -34,6 +34,24 @@ spring:
     baseline-on-migrate: true
     locations: classpath:db/migration
   
+  security:
+    oauth2:
+      client:
+        registration:
+          github:
+            client-id: ${GITHUB_CLIENT_ID:}
+            client-secret: ${GITHUB_CLIENT_SECRET:}
+            scope:
+              - user:email
+              - read:user
+            redirect-uri: "{baseUrl}/api/auth/oauth2/callback/{registrationId}"
+        provider:
+          github:
+            authorization-uri: https://github.com/login/oauth/authorize
+            token-uri: https://github.com/login/oauth/access_token
+            user-info-uri: https://api.github.com/user
+            user-name-attribute: id
+  
 # JWT Configuration
 jwt:
   secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
@@ -60,6 +78,13 @@ cors:
     - X-Requested-With
   allow-credentials: true
   max-age: 3600
+
+# App Configuration
+app:
+  oauth2:
+    authorized-redirect-uris:
+      - http://localhost:5173/auth/callback
+      - https://c0c9a716.mindvex-editor.pages.dev/auth/callback
 
 # Logging
 logging:

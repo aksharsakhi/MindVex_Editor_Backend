@@ -22,29 +22,38 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @EntityListeners(AuditingEntityListener.class)
 public class User {
-    
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    
+
     @Email(message = "Email should be valid")
     @NotBlank(message = "Email is required")
     @Column(nullable = false, unique = true)
     private String email;
-    
-    @NotBlank(message = "Password is required")
-    @Column(name = "password_hash", nullable = false)
+
+    @Column(name = "password_hash")
     private String passwordHash;
-    
+
     @NotBlank(message = "Full name is required")
     @Size(min = 2, max = 255, message = "Full name must be between 2 and 255 characters")
     @Column(name = "full_name", nullable = false)
     private String fullName;
-    
+
+    @Column(name = "provider", length = 50)
+    @Builder.Default
+    private String provider = "local";
+
+    @Column(name = "provider_id")
+    private String providerId;
+
+    @Column(name = "avatar_url", length = 500)
+    private String avatarUrl;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
-    
+
     @LastModifiedDate
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
