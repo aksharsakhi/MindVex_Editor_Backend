@@ -115,6 +115,15 @@ public class WatsonxService {
      * 2. Calls POST /api/v1/orchestrate/{agentId}/chat/completions
      * 3. Returns the agent response directly (synchronous)
      */
+    /**
+     * Invoke a deployed watsonx Orchestrate agent.
+     * 
+     * This method:
+     * 1. Gets an IAM token
+     * 2. Calls POST /v1/orchestrate/runs to start the agent (async)
+     * 3. Polls for completion
+     * 4. Returns the agent response
+     */
     public WatsonxChatResponse chat(WatsonxChatRequest request) {
         String agentType = request.getAgentId();
         log.info("Invoking watsonx Orchestrate agent: {}", agentType);
@@ -135,36 +144,40 @@ public class WatsonxService {
             String userMessage = buildUserMessage(request);
             log.info("User message: === CODE CONTEXT ===");
 
-            // Create chat completions request (OpenAI-compatible format)
-            Map<String, Object> chatRequest = new HashMap<>();
-            chatRequest.put("stream", false);
-            chatRequest.put("messages", List.of(
-                    Map.of("role", "user", "content", userMessage)));
+            // Create agent run request (Orchestrate /runs format)
+            Map<String, Object> runRequest = new HashMap<>();
+            runRequest.put("agent_id", agentId);
+            runRequest.put("message", Map.of(
+                    "role", "user",
+                    "content", userMessage));
 
             String endpoint = config.getOrchestrateEndpoint();
-            String apiPath = "/api/v1/orchestrate/" + agentId + "/chat/completions";
+            // Use /v1/orchestrate/runs endpoint
+            String apiPath = "/v1/orchestrate/runs";
             log.info("Calling Orchestrate API: POST {}{}", endpoint, apiPath);
 
-            // POST /api/v1/orchestrate/{agentId}/chat/completions
+            // POST /v1/orchestrate/runs
             @SuppressWarnings("unchecked")
-            Map<String, Object> chatResponse = orchestrateWebClient.post()
+            Map<String, Object> runResponse = orchestrateWebClient.post()
                     .uri(apiPath)
                     .header("Authorization", "Bearer " + token)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .bodyValue(chatRequest)
+                    .bodyValue(runRequest)
                     .retrieve()
                     .bodyToMono(Map.class)
                     .doOnError(e -> log.error("WebClient error: {}", e.getMessage()))
                     .block();
 
-            if (chatResponse == null) {
-                throw new RuntimeException("No response from Orchestrate chat completions API");
+            if (runResponse == null) {
+                throw new RuntimeException("No response from Orchestrate when starting agent run");
             }
 
-            log.info("Chat response received: {}", chatResponse.keySet());
+            String runId = (String) runResponse.get("run_id");
+            String threadId = (String) runResponse.get("thread_id");
+            log.info("Agent run started: runId={}, threadId={}", runId, threadId);
 
-            // Extract response from OpenAI-compatible format
-            return extractChatCompletionResponse(chatResponse, agentType);
+            // Poll for completion
+            return pollForCompletion(agentId, runId, threadId, agentType, token);
 
         } catch (WebClientResponseException e) {
             log.error("Orchestrate API error: status={}, body={}", e.getStatusCode(), e.getResponseBodyAsString());
@@ -177,43 +190,7 @@ public class WatsonxService {
         }
     }
 
-    /**
-     * Extract response from chat/completions format.
-     * Response format: { "choices": [{ "message": { "role": "assistant", "content":
-     * "..." } }] }
-     */
-    @SuppressWarnings("unchecked")
-    private WatsonxChatResponse extractChatCompletionResponse(Map<String, Object> response, String agentType) {
-        String responseText = "";
-        String threadId = (String) response.get("thread_id");
-
-        // Extract from choices array (OpenAI format)
-        List<Map<String, Object>> choices = (List<Map<String, Object>>) response.get("choices");
-        if (choices != null && !choices.isEmpty()) {
-            Map<String, Object> firstChoice = choices.get(0);
-            Map<String, Object> message = (Map<String, Object>) firstChoice.get("message");
-            if (message != null) {
-                responseText = (String) message.getOrDefault("content", "");
-            }
-        }
-
-        if (responseText.isEmpty()) {
-            log.warn("No content found in chat response: {}", response);
-            responseText = "No response content received from the agent.";
-        }
-
-        log.info("Agent response extracted: {} chars, threadId={}", responseText.length(), threadId);
-
-        return WatsonxChatResponse.builder()
-                .agentId(agentType)
-                .response(responseText)
-                .success(true)
-                .toolCalls(new ArrayList<>())
-                .metadata(Map.of(
-                        "thread_id", threadId != null ? threadId : "",
-                        "model", response.getOrDefault("model", "unknown")))
-                .build();
-    }
+    // removed extractChatCompletionResponse method
 
     /**
      * Poll for agent run completion.
