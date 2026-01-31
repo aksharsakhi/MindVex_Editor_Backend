@@ -10,12 +10,22 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 
 /**
- * Service for interacting with IBM watsonx Orchestrate.
- * Handles IAM token management and API calls to watsonx agents.
+ * Service for interacting with IBM watsonx Orchestrate Runtime API.
+ * 
+ * This service:
+ * - Handles IBM IAM token exchange and caching
+ * - Invokes deployed agents via Orchestrate Runtime API
+ * - Passes user messages and context to agents
+ * - Returns agent responses to the controller
+ * 
+ * Architecture:
+ * Frontend → Backend (this service) → IAM Token → Orchestrate → Agent → Tools →
+ * Backend
  */
 @Slf4j
 @Service
@@ -23,27 +33,32 @@ import java.util.*;
 public class WatsonxService {
 
     private final WatsonxConfig config;
-    private final WebClient watsonxWebClient;
+    private final WebClient orchestrateWebClient;
 
     // Token cache
     private String cachedToken;
     private LocalDateTime tokenExpiry;
 
-    /**
-     * Agent ID to Name mapping
-     */
-    private static final Map<String, String> AGENT_MAP = Map.of(
-            "codebase-analysis", "Codebase Analysis Agent",
-            "dependency-graph", "Dependency Graph Agent",
-            "qa-agent", "Q&A Agent",
-            "code-modifier", "Code Modifier Agent",
-            "code-review", "Code Review Agent",
-            "documentation", "Documentation Agent",
-            "pushing-agent", "Pushing Agent");
+    // Polling configuration for agent runs
+    private static final int MAX_POLL_ATTEMPTS = 60; // Max 60 attempts
+    private static final Duration POLL_INTERVAL = Duration.ofSeconds(2); // 2 seconds between polls
 
     /**
-     * Get IAM access token from IBM Cloud.
-     * Caches the token and refreshes when expired.
+     * Agent type to name mapping for display purposes
+     */
+    private static final Map<String, String> AGENT_DISPLAY_NAMES = Map.of(
+            "codebase-analysis", "MindVex Codebase Analyzer",
+            "dependency-graph", "MindVex Dependency Mapper",
+            "code-qa", "MindVex Code Q&A",
+            "code-modifier", "MindVex Code Modifier",
+            "code-review", "MindVex Code Reviewer",
+            "documentation", "MindVex Documentation Generator",
+            "git-assistant", "MindVex Git Assistant");
+
+    /**
+     * Get IBM IAM access token.
+     * Exchanges the API key for an access token and caches it.
+     * Token is refreshed 5 minutes before expiry.
      */
     public String getAccessToken() {
         // Return cached token if still valid
@@ -56,7 +71,7 @@ public class WatsonxService {
         log.info("Fetching new IAM access token from IBM Cloud");
 
         if (config.getApiKey() == null || config.getApiKey().isEmpty()) {
-            throw new RuntimeException("watsonx API key is not configured");
+            throw new RuntimeException("watsonx API key is not configured. Set WATSONX_API_KEY environment variable.");
         }
 
         try {
@@ -67,6 +82,7 @@ public class WatsonxService {
             String formData = "grant_type=urn:ibm:params:oauth:grant-type:apikey&apikey="
                     + config.getApiKey();
 
+            @SuppressWarnings("unchecked")
             Map<String, Object> response = iamClient.post()
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                     .bodyValue(formData)
@@ -92,204 +108,274 @@ public class WatsonxService {
     }
 
     /**
-     * Send chat message to watsonx Orchestrate agent.
+     * Invoke a deployed watsonx Orchestrate agent.
+     * 
+     * This method:
+     * 1. Gets an IAM token
+     * 2. Calls POST /v1/agents/{agentId}/runs to start the agent
+     * 3. Polls for completion
+     * 4. Returns the agent response
      */
     public WatsonxChatResponse chat(WatsonxChatRequest request) {
-        log.info("Sending chat to agent: {}", request.getAgentId());
+        String agentType = request.getAgentId();
+        log.info("Invoking watsonx Orchestrate agent: {}", agentType);
 
         try {
             String token = getAccessToken();
+            String agentId = resolveAgentId(agentType);
 
-            // Build the input with file context if provided
-            StringBuilder input = new StringBuilder();
-
-            if (request.getFiles() != null && !request.getFiles().isEmpty()) {
-                input.append("=== CODE CONTEXT ===\n\n");
-                for (var file : request.getFiles()) {
-                    input.append("--- File: ").append(file.getPath());
-                    if (file.getLanguage() != null) {
-                        input.append(" (").append(file.getLanguage()).append(")");
-                    }
-                    input.append(" ---\n");
-                    input.append(file.getContent()).append("\n\n");
-                }
-                input.append("=== END CODE CONTEXT ===\n\n");
+            if (agentId == null || agentId.isEmpty()) {
+                throw new RuntimeException("Agent ID not configured for: " + agentType +
+                        ". Set WATSONX_AGENTS_" + agentType.toUpperCase().replace("-", "_") + " environment variable.");
             }
 
-            input.append("User Request: ").append(request.getMessage());
+            // Build user message with context
+            String userMessage = buildUserMessage(request);
 
-            // Build request body for watsonx.ai text generation
-            Map<String, Object> body = new HashMap<>();
-            body.put("input", input.toString());
-            body.put("model_id", "ibm/granite-3-8b-instruct");
-            body.put("space_id", config.getSpaceId());
+            // Create agent run
+            Map<String, Object> runRequest = new HashMap<>();
+            runRequest.put("input", Map.of("message", userMessage));
 
-            // Model parameters
-            Map<String, Object> parameters = new HashMap<>();
-            parameters.put("max_new_tokens", 4096);
-            parameters.put("temperature", 0.7);
-            parameters.put("top_p", 0.9);
-            parameters.put("repetition_penalty", 1.1);
-            body.put("parameters", parameters);
+            log.debug("Starting agent run for agentId: {}", agentId);
 
-            // Add system prompt based on agent type
-            String systemPrompt = getSystemPromptForAgent(request.getAgentId());
-            body.put("input", systemPrompt + "\n\n" + input);
-
-            // Call watsonx.ai API
-            String endpoint = "/ml/v1/text/generation?version=2023-05-29";
-
-            Map<String, Object> response = watsonxWebClient.post()
-                    .uri(endpoint)
+            // POST /v1/agents/{agentId}/runs
+            @SuppressWarnings("unchecked")
+            Map<String, Object> runResponse = orchestrateWebClient.post()
+                    .uri("/v1/agents/{agentId}/runs", agentId)
                     .header("Authorization", "Bearer " + token)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .bodyValue(body)
+                    .bodyValue(runRequest)
                     .retrieve()
                     .bodyToMono(Map.class)
                     .block();
 
-            String generatedText = extractResponse(response);
+            if (runResponse == null) {
+                throw new RuntimeException("No response from Orchestrate when starting agent run");
+            }
 
-            return WatsonxChatResponse.builder()
-                    .id(UUID.randomUUID().toString())
-                    .agentId(request.getAgentId())
-                    .response(generatedText)
-                    .success(true)
-                    .timestamp(LocalDateTime.now())
-                    .build();
+            String runId = (String) runResponse.get("id");
+            String status = (String) runResponse.get("status");
 
+            log.info("Agent run started: runId={}, status={}", runId, status);
+
+            // If agent completes immediately, extract response
+            if ("completed".equalsIgnoreCase(status)) {
+                return extractAgentResponse(runResponse, agentType);
+            }
+
+            // Poll for completion
+            return pollForCompletion(agentId, runId, agentType, token);
+
+        } catch (WebClientResponseException e) {
+            log.error("Orchestrate API error: {} - {}", e.getStatusCode(), e.getResponseBodyAsString());
+            return WatsonxChatResponse.error(agentType,
+                    "Orchestrate API error: " + e.getStatusCode() + " - " + e.getResponseBodyAsString());
         } catch (Exception e) {
-            log.error("Error calling watsonx agent {}: {}", request.getAgentId(), e.getMessage(), e);
-            return WatsonxChatResponse.error(request.getAgentId(), e.getMessage());
+            log.error("Error invoking agent {}: {}", agentType, e.getMessage(), e);
+            return WatsonxChatResponse.error(agentType, e.getMessage());
         }
     }
 
     /**
-     * Get system prompt for each agent type.
+     * Poll for agent run completion.
      */
-    private String getSystemPromptForAgent(String agentId) {
-        return switch (agentId) {
-            case "codebase-analysis" -> """
-                    You are an expert code analyzer. Your task is to:
-                    - Analyze code structure and identify patterns
-                    - Detect potential bugs, logic errors, and code smells
-                    - Identify security vulnerabilities
-                    - Suggest improvements with clear explanations
-                    - Consider cross-file dependencies
-                    Be thorough but concise in your analysis.
-                    """;
-            case "dependency-graph" -> """
-                    You are a dependency analysis expert. Your task is to:
-                    - Parse and explain import/export relationships
-                    - Identify module dependencies
-                    - Detect circular dependencies
-                    - Explain the architecture and module relationships
-                    Format dependencies clearly for visualization.
-                    """;
-            case "qa-agent" -> """
-                    You are a helpful code assistant. Your task is to:
-                    - Answer questions about the code clearly and accurately
-                    - Explain how functions and classes work
-                    - Help developers understand the codebase
-                    - Provide code examples when helpful
-                    Be friendly and educational in your responses.
-                    """;
-            case "code-modifier" -> """
-                    You are an expert code modifier. Your task is to:
-                    - Understand the user's modification request precisely
-                    - Generate clean, working code changes
-                    - Maintain existing code style and conventions
-                    - Preserve functionality when refactoring
-                    - Provide before/after comparisons
-                    Always show the complete modified code.
-                    """;
-            case "code-review" -> """
-                    You are an expert code reviewer. Your task is to:
-                    - Review code changes thoroughly
-                    - Check for security vulnerabilities
-                    - Verify logic correctness
-                    - Suggest performance improvements
-                    - Follow best practices for code review
-                    Provide constructive feedback with specific suggestions.
-                    """;
-            case "documentation" -> """
-                    You are a documentation expert. Your task is to:
-                    - Generate comprehensive README files
-                    - Create clear API documentation
-                    - Add meaningful code comments
-                    - Generate usage examples
-                    - Follow documentation best practices
-                    Write documentation that is clear and helpful for developers.
-                    """;
-            case "pushing-agent" -> """
-                    You are a Git workflow assistant. Your task is to:
-                    - Generate meaningful commit messages
-                    - Suggest branch naming conventions
-                    - Guide through Git operations
-                    - Create pull request descriptions
-                    - Explain Git concepts when needed
-                    Help users follow Git best practices.
-                    """;
-            default -> """
-                    You are an AI assistant for code analysis and development.
-                    Help the user with their request clearly and accurately.
-                    """;
-        };
+    private WatsonxChatResponse pollForCompletion(String agentId, String runId, String agentType, String token) {
+        log.info("Polling for agent run completion: runId={}", runId);
+
+        for (int attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+            try {
+                Thread.sleep(POLL_INTERVAL.toMillis());
+
+                @SuppressWarnings("unchecked")
+                Map<String, Object> statusResponse = orchestrateWebClient.get()
+                        .uri("/v1/agents/{agentId}/runs/{runId}", agentId, runId)
+                        .header("Authorization", "Bearer " + token)
+                        .retrieve()
+                        .bodyToMono(Map.class)
+                        .block();
+
+                if (statusResponse == null) {
+                    continue;
+                }
+
+                String status = (String) statusResponse.get("status");
+                log.debug("Poll attempt {}: status={}", attempt + 1, status);
+
+                if ("completed".equalsIgnoreCase(status)) {
+                    return extractAgentResponse(statusResponse, agentType);
+                } else if ("failed".equalsIgnoreCase(status)) {
+                    String error = (String) statusResponse.getOrDefault("error", "Agent run failed");
+                    return WatsonxChatResponse.error(agentType, error);
+                } else if ("cancelled".equalsIgnoreCase(status)) {
+                    return WatsonxChatResponse.error(agentType, "Agent run was cancelled");
+                }
+                // Status is still "running" or "pending", continue polling
+
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return WatsonxChatResponse.error(agentType, "Polling interrupted");
+            } catch (Exception e) {
+                log.warn("Poll attempt {} failed: {}", attempt + 1, e.getMessage());
+            }
+        }
+
+        return WatsonxChatResponse.error(agentType, "Agent run timed out after " +
+                (MAX_POLL_ATTEMPTS * POLL_INTERVAL.toSeconds()) + " seconds");
     }
 
     /**
-     * Extract the generated text from watsonx response.
+     * Extract agent response from the run result.
      */
-    private String extractResponse(Map<String, Object> response) {
-        if (response == null) {
-            return "No response received from watsonx";
+    private WatsonxChatResponse extractAgentResponse(Map<String, Object> runResponse, String agentType) {
+        String responseText = "";
+        List<WatsonxChatResponse.ToolCall> toolCalls = new ArrayList<>();
+
+        // Extract output message
+        @SuppressWarnings("unchecked")
+        Map<String, Object> output = (Map<String, Object>) runResponse.get("output");
+        if (output != null) {
+            Object message = output.get("message");
+            if (message != null) {
+                responseText = message.toString();
+            }
         }
 
-        // watsonx.ai response structure
-        if (response.containsKey("results")) {
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> results = (List<Map<String, Object>>) response.get("results");
-            if (!results.isEmpty()) {
-                Object generatedText = results.get(0).get("generated_text");
-                if (generatedText != null) {
-                    return generatedText.toString();
+        // Extract tool calls if present
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> steps = (List<Map<String, Object>>) runResponse.get("steps");
+        if (steps != null) {
+            for (Map<String, Object> step : steps) {
+                String type = (String) step.get("type");
+                if ("tool_call".equalsIgnoreCase(type)) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> toolCall = (Map<String, Object>) step.get("tool_call");
+                    if (toolCall != null) {
+                        toolCalls.add(WatsonxChatResponse.ToolCall.builder()
+                                .toolName((String) toolCall.get("name"))
+                                .parameters((Map<String, Object>) toolCall.get("arguments"))
+                                .result((String) step.get("output"))
+                                .build());
+                    }
                 }
             }
         }
 
-        log.warn("Unexpected response structure: {}", response);
-        return "Received response but could not parse it: " + response.toString();
+        // If no output message, try to get from last step
+        if (responseText.isEmpty() && steps != null && !steps.isEmpty()) {
+            Object lastStepOutput = steps.get(steps.size() - 1).get("output");
+            if (lastStepOutput != null) {
+                responseText = lastStepOutput.toString();
+            }
+        }
+
+        return WatsonxChatResponse.builder()
+                .id((String) runResponse.get("id"))
+                .agentId(agentType)
+                .response(responseText)
+                .toolCalls(toolCalls.isEmpty() ? null : toolCalls)
+                .success(true)
+                .timestamp(LocalDateTime.now())
+                .build();
     }
 
     /**
-     * List available agents.
+     * Build user message with file context if provided.
      */
-    public List<Map<String, String>> listAgents() {
-        List<Map<String, String>> agents = new ArrayList<>();
-        AGENT_MAP.forEach((id, name) -> {
-            Map<String, String> agent = new HashMap<>();
-            agent.put("id", id);
+    private String buildUserMessage(WatsonxChatRequest request) {
+        StringBuilder message = new StringBuilder();
+
+        // Add file context if provided
+        if (request.getFiles() != null && !request.getFiles().isEmpty()) {
+            message.append("=== CODE CONTEXT ===\n\n");
+            for (var file : request.getFiles()) {
+                message.append("--- File: ").append(file.getPath());
+                if (file.getLanguage() != null) {
+                    message.append(" (").append(file.getLanguage()).append(")");
+                }
+                message.append(" ---\n");
+                message.append(file.getContent()).append("\n\n");
+            }
+            message.append("=== END CODE CONTEXT ===\n\n");
+        }
+
+        message.append(request.getMessage());
+        return message.toString();
+    }
+
+    /**
+     * Resolve agent type to deployed agent ID from configuration.
+     */
+    private String resolveAgentId(String agentType) {
+        if (config.getAgents() == null) {
+            log.warn("Agent IDs not configured. Using agent type as ID: {}", agentType);
+            return agentType; // Fallback to using type as ID
+        }
+
+        return switch (agentType) {
+            case "codebase-analysis" -> config.getAgents().getCodebaseAnalyzer();
+            case "dependency-graph" -> config.getAgents().getDependencyMapper();
+            case "code-qa", "qa-agent" -> config.getAgents().getCodeQa();
+            case "code-modifier" -> config.getAgents().getCodeModifier();
+            case "code-review" -> config.getAgents().getCodeReviewer();
+            case "documentation" -> config.getAgents().getDocumentationGenerator();
+            case "git-assistant", "pushing-agent" -> config.getAgents().getGitAssistant();
+            default -> agentType; // Use as-is if no mapping
+        };
+    }
+
+    /**
+     * List available agents with their configuration status.
+     */
+    public List<Map<String, Object>> listAgents() {
+        List<Map<String, Object>> agents = new ArrayList<>();
+
+        for (var entry : AGENT_DISPLAY_NAMES.entrySet()) {
+            String type = entry.getKey();
+            String name = entry.getValue();
+            String agentId = resolveAgentId(type);
+
+            Map<String, Object> agent = new HashMap<>();
+            agent.put("id", type);
             agent.put("name", name);
+            agent.put("agentId", agentId);
+            agent.put("configured", agentId != null && !agentId.isEmpty() && !agentId.equals(type));
             agents.add(agent);
-        });
+        }
+
         return agents;
     }
 
     /**
-     * Check if watsonx is configured and accessible.
+     * Check watsonx Orchestrate health and configuration.
      */
     public Map<String, Object> checkHealth() {
         Map<String, Object> health = new HashMap<>();
-        health.put("configured", config.getApiKey() != null && !config.getApiKey().isEmpty());
-        health.put("spaceId", config.getSpaceId());
-        health.put("endpoint", config.getEndpoint());
 
-        try {
-            getAccessToken();
-            health.put("authenticated", true);
-        } catch (Exception e) {
+        // Check API key
+        boolean hasApiKey = config.getApiKey() != null && !config.getApiKey().isEmpty();
+        health.put("apiKeyConfigured", hasApiKey);
+        health.put("orchestrateEndpoint", config.getOrchestrateEndpoint());
+
+        // Check agent configuration
+        Map<String, Boolean> agentStatus = new HashMap<>();
+        for (var entry : AGENT_DISPLAY_NAMES.entrySet()) {
+            String agentId = resolveAgentId(entry.getKey());
+            agentStatus.put(entry.getKey(), agentId != null && !agentId.isEmpty() && !agentId.equals(entry.getKey()));
+        }
+        health.put("agents", agentStatus);
+
+        // Try to authenticate
+        if (hasApiKey) {
+            try {
+                getAccessToken();
+                health.put("authenticated", true);
+            } catch (Exception e) {
+                health.put("authenticated", false);
+                health.put("authError", e.getMessage());
+            }
+        } else {
             health.put("authenticated", false);
-            health.put("error", e.getMessage());
+            health.put("authError", "API key not configured");
         }
 
         return health;

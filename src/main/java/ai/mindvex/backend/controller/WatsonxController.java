@@ -16,100 +16,115 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * REST Controller for IBM watsonx Orchestrate AI Agents.
- * Provides endpoints for chatting with various AI agents.
+ * REST Controller for MindVex AI capabilities powered by IBM watsonx
+ * Orchestrate.
+ * 
+ * This controller provides clean AI endpoints that:
+ * - Accept user intent + context
+ * - Call the corresponding deployed Orchestrate agent
+ * - Return agent response to frontend
+ * 
+ * Architecture:
+ * Frontend → /api/ai/* → This Controller → WatsonxService → Orchestrate Runtime
+ * API
  */
 @Slf4j
 @RestController
-@RequestMapping("/api/watsonx")
 @RequiredArgsConstructor
-@Tag(name = "watsonx", description = "IBM watsonx Orchestrate AI Agents")
+@Tag(name = "ai", description = "MindVex AI Agent Endpoints (via IBM watsonx Orchestrate)")
 @SecurityRequirement(name = "Bearer Authentication")
 public class WatsonxController {
 
     private final WatsonxService watsonxService;
 
-    @PostMapping("/chat")
-    @Operation(summary = "Chat with AI agent", description = "Send a message to a specific watsonx AI agent")
-    public ResponseEntity<WatsonxChatResponse> chat(
-            @Valid @RequestBody WatsonxChatRequest request) {
-        log.info("Chat request for agent: {}", request.getAgentId());
-        WatsonxChatResponse response = watsonxService.chat(request);
-        return ResponseEntity.ok(response);
-    }
+    // ============================================
+    // Primary AI Endpoints (as per report: /api/ai/*)
+    // ============================================
 
-    @GetMapping("/agents")
-    @Operation(summary = "List available agents", description = "Get list of all available AI agents")
-    public ResponseEntity<List<Map<String, String>>> listAgents() {
-        return ResponseEntity.ok(watsonxService.listAgents());
-    }
-
-    @GetMapping("/health")
-    @Operation(summary = "Check watsonx health", description = "Check if watsonx is configured and accessible")
-    public ResponseEntity<Map<String, Object>> checkHealth() {
-        return ResponseEntity.ok(watsonxService.checkHealth());
-    }
-
-    @PostMapping("/analyze")
-    @Operation(summary = "Analyze codebase", description = "Perform full codebase analysis using AI")
+    @PostMapping("/api/ai/codebase/analyze")
+    @Operation(summary = "Analyze codebase", description = "Perform comprehensive codebase analysis using MindVex Codebase Analyzer agent")
     public ResponseEntity<WatsonxChatResponse> analyzeCodebase(
             @Valid @RequestBody WatsonxChatRequest request) {
-        log.info("Codebase analysis request");
+        log.info("AI Request: Codebase Analysis");
         request.setAgentId("codebase-analysis");
         return ResponseEntity.ok(watsonxService.chat(request));
     }
 
-    @PostMapping("/review")
-    @Operation(summary = "Review code changes", description = "Review code changes using AI")
-    public ResponseEntity<WatsonxChatResponse> reviewCode(
-            @Valid @RequestBody WatsonxChatRequest request) {
-        log.info("Code review request");
-        request.setAgentId("code-review");
-        return ResponseEntity.ok(watsonxService.chat(request));
-    }
-
-    @PostMapping("/document")
-    @Operation(summary = "Generate documentation", description = "Generate documentation for code using AI")
-    public ResponseEntity<WatsonxChatResponse> generateDocumentation(
-            @Valid @RequestBody WatsonxChatRequest request) {
-        log.info("Documentation generation request");
-        request.setAgentId("documentation");
-        return ResponseEntity.ok(watsonxService.chat(request));
-    }
-
-    @PostMapping("/ask")
-    @Operation(summary = "Ask about code", description = "Ask questions about the codebase")
-    public ResponseEntity<WatsonxChatResponse> askQuestion(
-            @Valid @RequestBody WatsonxChatRequest request) {
-        log.info("Q&A request");
-        request.setAgentId("qa-agent");
-        return ResponseEntity.ok(watsonxService.chat(request));
-    }
-
-    @PostMapping("/modify")
-    @Operation(summary = "Modify code", description = "Request code modifications using AI")
+    @PostMapping("/api/ai/code/modify")
+    @Operation(summary = "Modify code", description = "Request code modifications using MindVex Code Modifier agent")
     public ResponseEntity<WatsonxChatResponse> modifyCode(
             @Valid @RequestBody WatsonxChatRequest request) {
-        log.info("Code modification request");
+        log.info("AI Request: Code Modification");
         request.setAgentId("code-modifier");
         return ResponseEntity.ok(watsonxService.chat(request));
     }
 
-    @PostMapping("/dependencies")
-    @Operation(summary = "Analyze dependencies", description = "Analyze code dependencies and generate graph data")
+    @PostMapping("/api/ai/code/ask")
+    @Operation(summary = "Ask about code", description = "Ask questions about the codebase using MindVex Code Q&A agent")
+    public ResponseEntity<WatsonxChatResponse> askAboutCode(
+            @Valid @RequestBody WatsonxChatRequest request) {
+        log.info("AI Request: Code Q&A");
+        request.setAgentId("code-qa");
+        return ResponseEntity.ok(watsonxService.chat(request));
+    }
+
+    @PostMapping("/api/ai/code/review")
+    @Operation(summary = "Review code", description = "Review code changes using MindVex Code Reviewer agent")
+    public ResponseEntity<WatsonxChatResponse> reviewCode(
+            @Valid @RequestBody WatsonxChatRequest request) {
+        log.info("AI Request: Code Review");
+        request.setAgentId("code-review");
+        return ResponseEntity.ok(watsonxService.chat(request));
+    }
+
+    @PostMapping("/api/ai/code/document")
+    @Operation(summary = "Generate documentation", description = "Generate documentation using MindVex Documentation Generator agent")
+    public ResponseEntity<WatsonxChatResponse> generateDocumentation(
+            @Valid @RequestBody WatsonxChatRequest request) {
+        log.info("AI Request: Documentation Generation");
+        request.setAgentId("documentation");
+        return ResponseEntity.ok(watsonxService.chat(request));
+    }
+
+    @PostMapping("/api/ai/git/assist")
+    @Operation(summary = "Git assistance", description = "Get help with Git operations using MindVex Git Assistant agent")
+    public ResponseEntity<WatsonxChatResponse> gitAssist(
+            @Valid @RequestBody WatsonxChatRequest request) {
+        log.info("AI Request: Git Assistance");
+        request.setAgentId("git-assistant");
+        return ResponseEntity.ok(watsonxService.chat(request));
+    }
+
+    @PostMapping("/api/ai/dependencies/analyze")
+    @Operation(summary = "Analyze dependencies", description = "Analyze code dependencies using MindVex Dependency Mapper agent")
     public ResponseEntity<WatsonxChatResponse> analyzeDependencies(
             @Valid @RequestBody WatsonxChatRequest request) {
-        log.info("Dependency analysis request");
+        log.info("AI Request: Dependency Analysis");
         request.setAgentId("dependency-graph");
         return ResponseEntity.ok(watsonxService.chat(request));
     }
 
-    @PostMapping("/git-help")
-    @Operation(summary = "Git assistance", description = "Get help with Git operations")
-    public ResponseEntity<WatsonxChatResponse> gitHelp(
+    // ============================================
+    // Management Endpoints (/api/watsonx/*)
+    // ============================================
+
+    @PostMapping("/api/watsonx/chat")
+    @Operation(summary = "Generic agent chat", description = "Send a message to a specific agent by ID")
+    public ResponseEntity<WatsonxChatResponse> chat(
             @Valid @RequestBody WatsonxChatRequest request) {
-        log.info("Git help request");
-        request.setAgentId("pushing-agent");
+        log.info("Generic chat request for agent: {}", request.getAgentId());
         return ResponseEntity.ok(watsonxService.chat(request));
+    }
+
+    @GetMapping("/api/watsonx/agents")
+    @Operation(summary = "List available agents", description = "Get list of all available AI agents and their configuration status")
+    public ResponseEntity<List<Map<String, Object>>> listAgents() {
+        return ResponseEntity.ok(watsonxService.listAgents());
+    }
+
+    @GetMapping("/api/watsonx/health")
+    @Operation(summary = "Check health", description = "Check if watsonx Orchestrate is configured and accessible")
+    public ResponseEntity<Map<String, Object>> checkHealth() {
+        return ResponseEntity.ok(watsonxService.checkHealth());
     }
 }

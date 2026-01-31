@@ -125,6 +125,17 @@ springdoc:
 # IBM watsonx Orchestrate Configuration
 watsonx:
   api-key: ${WATSONX_API_KEY:}
-  space-id: ${WATSONX_SPACE_ID:}
-  endpoint: ${WATSONX_ENDPOINT:https://us-south.ml.cloud.ibm.com}
+  orchestrate-endpoint: ${WATSONX_ORCHESTRATE_ENDPOINT:https://us-south.watson-orchestrate.cloud.ibm.com}
   iam-url: https://iam.cloud.ibm.com/identity/token
+  
+  # Deployed Agent IDs from watsonx Orchestrate
+  # These are obtained after deploying each agent in the Orchestrate UI
+  agents:
+    codebase-analyzer: ${WATSONX_AGENT_CODEBASE_ANALYZER:}
+    dependency-mapper: ${WATSONX_AGENT_DEPENDENCY_MAPPER:}
+    code-qa: ${WATSONX_AGENT_CODE_QA:}
+    code-modifier: ${WATSONX_AGENT_CODE_MODIFIER:}
+    code-reviewer: ${WATSONX_AGENT_CODE_REVIEWER:}
+    documentation-generator: ${WATSONX_AGENT_DOCUMENTATION:}
+    git-assistant: ${WATSONX_AGENT_GIT_ASSISTANT:}
+
