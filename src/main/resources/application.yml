@@ -34,22 +34,6 @@ spring:
     baseline-on-migrate: true
     locations: classpath:db/migration
   
-  # Email Configuration for OTP
-  mail:
-    host: ${MAIL_HOST:smtp.gmail.com}
-    port: ${MAIL_PORT:587}
-    username: ${MAIL_USERNAME:}
-    password: ${MAIL_PASSWORD:}
-    properties:
-      mail:
-        smtp:
-          auth: true
-          starttls:
-            enable: true
-          connectiontimeout: 5000
-          timeout: 5000
-          writetimeout: 5000
-  
   security:
     oauth2:
       client:
@@ -60,6 +44,8 @@ spring:
             scope:
               - user:email
               - read:user
+              - repo
+              - read:packages
             redirect-uri: "{baseUrl}/api/auth/oauth2/callback/{registrationId}"
         provider:
           github:
@@ -121,21 +107,4 @@ springdoc:
     path: /swagger-ui.html
     operations-sorter: method
     tags-sorter: alpha
-
-# IBM watsonx Orchestrate Configuration
-watsonx:
-  api-key: ${WATSONX_API_KEY:}
-  orchestrate-endpoint: ${WATSONX_ORCHESTRATE_ENDPOINT:https://us-south.watson-orchestrate.cloud.ibm.com}
-  iam-url: https://iam.cloud.ibm.com/identity/token
-  
-  # Deployed Agent IDs from watsonx Orchestrate
-  # These are obtained after deploying each agent in the Orchestrate UI
-  agents:
-    codebase-analyzer: ${WATSONX_AGENT_CODEBASE_ANALYZER:}
-    dependency-mapper: ${WATSONX_AGENT_DEPENDENCY_MAPPER:}
-    code-qa: ${WATSONX_AGENT_CODE_QA:}
-    code-modifier: ${WATSONX_AGENT_CODE_MODIFIER:}
-    code-reviewer: ${WATSONX_AGENT_CODE_REVIEWER:}
-    documentation-generator: ${WATSONX_AGENT_DOCUMENTATION:}
-    git-assistant: ${WATSONX_AGENT_GIT_ASSISTANT:}
 
