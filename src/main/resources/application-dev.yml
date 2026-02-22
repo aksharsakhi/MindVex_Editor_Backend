@@ -1,3 +1,7 @@
+# ─── Dev profile — verbose logging only ────────────────────────────────────
+# All connection strings, secrets, and origins are read from .env
+# No values are overridden here — the base application.yml handles everything.
+
 spring:
   jpa:
     show-sql: true

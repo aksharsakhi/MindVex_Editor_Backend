@@ -1,57 +1,21 @@
+# ─── Prod profile — quieter logging, tighter pool ──────────────────────────
+# All connection strings, secrets, and origins are read from Render env vars
+# (DATABASE_URL, JWT_SECRET, GITHUB_CLIENT_ID/SECRET, CORS_ORIGINS,
+#  APP_OAUTH2_AUTHORIZED_REDIRECT_URIS).
+# No values are hardcoded or overridden here.
+
 spring:
   datasource:
-    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/mindvex}
-    driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 5
       minimum-idle: 2
-      connection-timeout: 30000
-      idle-timeout: 600000
-      max-lifetime: 1800000
-  
+
   jpa:
-    hibernate:
-      ddl-auto: update
     show-sql: false
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-        format_sql: false
-        jdbc:
-          time_zone: UTC
-  
-  # Disable Flyway for now - we're using Hibernate ddl-auto=update
-  flyway:
-    enabled: false
-  
-  # Email Configuration for OTP
-  mail:
-    host: ${MAIL_HOST:smtp.gmail.com}
-    port: ${MAIL_PORT:587}
-    username: ${MAIL_USERNAME}
-    password: ${MAIL_PASSWORD}
-    properties:
-      mail:
-        smtp:
-          auth: true
-          starttls:
-            enable: true
-          connectiontimeout: 10000
-          timeout: 10000
-          writetimeout: 10000
-
-jwt:
-  secret: ${JWT_SECRET}
-
-cors:
-  allowed-origins:
-    - https://mindvex-editor.pages.dev
-    - https://*.pages.dev
-    - https://mindvex.ai
 
 logging:
   level:
     root: INFO
-    ai.mindvex: DEBUG
+    ai.mindvex: INFO
     org.springframework.security: INFO
     org.hibernate: INFO

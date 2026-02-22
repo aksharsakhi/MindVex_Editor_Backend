@@ -24,10 +24,13 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
     public OAuth2AuthenticationSuccessHandler(
             JwtService jwtService,
             HttpCookieOAuth2AuthorizationRequestRepository authorizationRequestRepository,
-            @Value("${app.oauth2.authorized-redirect-uris:http://localhost:5173/auth/callback}") String[] authorizedRedirectUris) {
+            @Value("${app.oauth2.authorized-redirect-uris-str}") String authorizedRedirectUrisStr) {
         this.jwtService = jwtService;
         this.authorizationRequestRepository = authorizationRequestRepository;
-        this.authorizedRedirectUris = Arrays.asList(authorizedRedirectUris);
+        this.authorizedRedirectUris = Arrays.stream(authorizedRedirectUrisStr.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .toList();
     }
 
     @Override
@@ -54,7 +57,9 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
             throw new IllegalArgumentException("Unauthorized Redirect URI");
         }
 
-        String targetUrl = redirectUri != null ? redirectUri : "https://mindvex-editor.pages.dev/auth/callback";
+        // Fall back to the first configured authorized redirect URI (from
+        // APP_OAUTH2_AUTHORIZED_REDIRECT_URIS)
+        String targetUrl = redirectUri != null ? redirectUri : authorizedRedirectUris.get(0);
 
         // Get user from authentication
         CustomOAuth2User oauth2User = (CustomOAuth2User) authentication.getPrincipal();
