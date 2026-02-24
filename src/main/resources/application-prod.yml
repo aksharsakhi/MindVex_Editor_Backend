@@ -15,6 +15,9 @@ spring:
   jpa:
     show-sql: false
 
+  flyway:
+    validate-on-migrate: false
+
 logging:
   level:
     root: INFO
