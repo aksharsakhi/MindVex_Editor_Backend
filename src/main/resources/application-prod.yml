@@ -13,6 +13,8 @@ spring:
         sslmode: disable
 
   jpa:
+    hibernate:
+      ddl-auto: none
     show-sql: false
 
   flyway:
