@@ -8,9 +8,11 @@ import ai.mindvex.backend.dto.GraphResponse.CyNode.CyNodeData;
 import ai.mindvex.backend.dto.ReferenceResult;
 import ai.mindvex.backend.entity.IndexJob;
 import ai.mindvex.backend.entity.User;
+import ai.mindvex.backend.entity.VectorEmbedding;
 import ai.mindvex.backend.repository.IndexJobRepository;
 import ai.mindvex.backend.repository.UserRepository;
 import ai.mindvex.backend.service.DependencyEngine;
+import ai.mindvex.backend.service.EmbeddingIngestionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -39,6 +41,7 @@ public class GraphController {
     private final DependencyEngine dependencyEngine;
     private final IndexJobRepository indexJobRepository;
     private final UserRepository userRepository;
+    private final EmbeddingIngestionService embeddingService;
     private final JdbcTemplate jdbc;
 
     // ─── POST /api/graph/build ────────────────────────────────────────────────
@@ -188,6 +191,138 @@ public class GraphController {
         return ResponseEntity.ok(refs);
     }
 
+    // ─── POST /api/graph/semantic-filter ─────────────────────────────────────
+
+    /**
+     * Filter graph nodes using semantic search on embeddings.
+     * Returns node IDs that match the semantic query.
+     */
+    @PostMapping("/semantic-filter")
+    public ResponseEntity<Map<String, Object>> semanticFilter(
+            @RequestParam String repoUrl,
+            @RequestBody Map<String, Object> body,
+            Authentication authentication) {
+
+        Long userId = extractUserId(authentication);
+        String query = (String) body.getOrDefault("query", "");
+        int topK = (int) body.getOrDefault("topK", 10);
+
+        log.info("[GraphController] Semantic filter: query='{}', topK={}", query, topK);
+
+        try {
+            List<VectorEmbedding> results = embeddingService.semanticSearch(userId, repoUrl, query, topK);
+
+            // Extract unique file paths from matching chunks
+            Set<String> matchingFiles = results.stream()
+                    .map(VectorEmbedding::getFilePath)
+                    .collect(Collectors.toSet());
+
+            // Convert to node IDs for graph filtering
+            List<String> nodeIds = matchingFiles.stream()
+                    .map(this::nodeId)
+                    .collect(Collectors.toList());
+
+            List<Map<String, Object>> details = results.stream()
+                    .map(r -> Map.<String, Object>of(
+                            "filePath", r.getFilePath(),
+                            "nodeId", nodeId(r.getFilePath()),
+                            "chunkIndex", r.getChunkIndex(),
+                            "preview", r.getChunkText().length() > 200
+                                    ? r.getChunkText().substring(0, 200) + "..."
+                                    : r.getChunkText()))
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(Map.of(
+                    "query", query,
+                    "matchingNodes", nodeIds,
+                    "details", details,
+                    "totalMatches", results.size()));
+
+        } catch (Exception e) {
+            log.error("[GraphController] Semantic filter failed: {}", e.getMessage(), e);
+            return ResponseEntity.ok(Map.of(
+                    "query", query,
+                    "matchingNodes", List.of(),
+                    "details", List.of(),
+                    "totalMatches", 0,
+                    "error", "Embeddings not available or search failed: " + e.getMessage()));
+        }
+    }
+
+    // ─── GET /api/graph/stats ────────────────────────────────────────────────
+
+    /**
+     * Returns graph statistics including complexity metrics.
+     */
+    @GetMapping("/stats")
+    public ResponseEntity<Map<String, Object>> getGraphStats(
+            @RequestParam String repoUrl,
+            Authentication authentication) {
+
+        Long userId = extractUserId(authentication);
+
+        try {
+            // Get basic graph data
+            List<Object[]> edges = dependencyEngine.getAllEdgesRaw(userId, repoUrl);
+            Set<String> files = new HashSet<>();
+            Map<String, Integer> inDegree = new HashMap<>();
+            Map<String, Integer> outDegree = new HashMap<>();
+
+            for (Object[] edge : edges) {
+                String source = (String) edge[0];
+                String target = (String) edge[1];
+                files.add(source);
+                files.add(target);
+                outDegree.put(source, outDegree.getOrDefault(source, 0) + 1);
+                inDegree.put(target, inDegree.getOrDefault(target, 0) + 1);
+            }
+
+            // Calculate complexity scores based on degree centrality
+            Map<String, Map<String, Object>> nodeStats = new HashMap<>();
+            for (String file : files) {
+                int in = inDegree.getOrDefault(file, 0);
+                int out = outDegree.getOrDefault(file, 0);
+                int complexity = in + out;
+
+                nodeStats.put(nodeId(file), Map.of(
+                        "filePath", file,
+                        "inDegree", in,
+                        "outDegree", out,
+                        "complexity", complexity,
+                        "language", detectLanguage(file)));
+            }
+
+            // Language distribution
+            Map<String, Long> languages = files.stream()
+                    .collect(Collectors.groupingBy(
+                            this::detectLanguage,
+                            Collectors.counting()));
+
+            // Find most connected nodes (hubs)
+            List<Map<String, Object>> hubs = nodeStats.values().stream()
+                    .sorted((a, b) -> Integer.compare(
+                            (Integer) b.get("complexity"),
+                            (Integer) a.get("complexity")))
+                    .limit(10)
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(Map.of(
+                    "totalNodes", files.size(),
+                    "totalEdges", edges.size(),
+                    "languages", languages,
+                    "hubs", hubs,
+                    "nodeStats", nodeStats,
+                    "avgComplexity", nodeStats.values().stream()
+                            .mapToInt(n -> (Integer) n.get("complexity"))
+                            .average()
+                            .orElse(0.0)));
+
+        } catch (Exception e) {
+            log.error("[GraphController] Stats failed: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+        }
+    }
+
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
     private Long extractUserId(Authentication authentication) {
@@ -229,4 +364,3 @@ public class GraphController {
         return "unknown";
     }
 }
-
