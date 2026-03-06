@@ -371,21 +371,113 @@ public class LivingWikiService {
                 <file content here>
 
                 Files to generate:
-                1. README.md — Professional overview including high-level architecture, tech stack (with versions), quick start, and detailed module breakdowns. Include ASCII diagrams for simple flows.
-                2. adr.md — Formal Architecture Decision Records. Document at least 5 key decisions with status, context, decision, and consequences.
-                3. api-reference.md — Exhaustive API documentation. For every endpoint/service, include base URL, auth, exhaustive parameter tables, example requests/responses, and error codes.
-                4. architecture.md — Industrial-grade system design. Describe design patterns (SOLID, GoF), state management, security model, and data flow. Use deep technical analysis.
-                5. documentation-health.md — Detailed health report. Analyze coverage, clarity, and consistency. Provide a health score (X out of 100).
-                6. api-descriptions.json — Schema-compliant JSON of all endpoints.
-                7. doc_snapshot.json — Project statistics, module counts, and health tier.
-                8. tree.txt — Professional ASCII tree.
-                9. tree.json — Structured hierarchical map for visual exploration.
-                10. architecture-graph.json — A JSON object for interactive graph visualization: { "nodes": [{"id": "...", "label": "...", "type": "module/component"}], "edges": [{"source": "...", "target": "...", "label": "..."}] }
+                
+                1. README.md — Comprehensive project documentation with the following REQUIRED sections:
+                   # Project Title
+                   - Clear, descriptive title as H1 header
+                   - 1-2 sentence description of what the project does, its purpose, and problem it solves
+                   
+                   ## Table of Contents
+                   - Anchor links to all major sections for quick navigation
+                   
+                   ## Features
+                   - Bulleted list of key features and functionality
+                   - Highlight what makes this project stand out
+                   
+                   ## Tech Stack
+                   - List technologies with versions (e.g., Java 21, Spring Boot 3.2.1, React 18)
+                   - Include frameworks, libraries, and tools used
+                   
+                   ## Installation and Setup
+                   ### Prerequisites
+                   - Required software, libraries, OS versions
+                   - System requirements
+                   
+                   ### Installation Steps
+                   - Step-by-step commands to clone repo
+                   - Dependency installation commands (npm install, mvn install, etc.)
+                   
+                   ### Configuration
+                   - Environment variables needed
+                   - Configuration files to set up
+                   - Database setup if applicable
+                   
+                   ## Usage Examples
+                   - Clear instructions with code snippets
+                   - Command-line examples
+                   - Expected output descriptions
+                   
+                   ## Project Structure
+                   - Brief overview of main directories and their purpose
+                   - ASCII tree of key folders (do NOT hallucinate, use actual structure provided)
+                   
+                   ## Contributing
+                   - Guidelines for bug reports
+                   - Pull request process
+                   - Coding standards
+                   
+                   ## License
+                   - Clear license statement (e.g., MIT, Apache 2.0)
+                   
+                   ## Credits and Acknowledgments
+                   - Contributors and team members
+                   - Third-party libraries and resources used
+                   
+                   ## Support
+                   - How to get help (issue tracker, discussions)
+                   - Contact information if applicable
+                   
+                   ## Project Status
+                   - Current development stage (active, maintenance, etc.)
+                   - Roadmap of planned features (if applicable)
+                   
+                   CRITICAL: Base ALL content on the actual repository structure provided below. DO NOT invent features, dependencies, or technologies that aren't evident in the structure. If information is missing, state "To be documented" rather than hallucinating.
+                
+                2. adr.md — Formal Architecture Decision Records. Document at least 5 key decisions with status, context, decision, and consequences. Base decisions on actual code structure.
+                
+                3. api-reference.md — API documentation. For endpoints/services evident in the code, include base URL, auth, parameter tables, example requests/responses, and error codes.
+                
+                4. architecture.md — System design documentation. Describe design patterns visible in the code, state management, security model, and data flow based on actual implementation.
+                
+                5. documentation-health.md — Health report analyzing coverage, clarity, and consistency. Provide a health score (X out of 100) based on actual code analysis.
+                
+                6. api-descriptions.json — Schema-compliant JSON of all endpoints found in controllers/routes.
+                
+                7. doc_snapshot.json — Project statistics in JSON format:
+                   {
+                     "project_stats": {
+                       "files": <actual count>,
+                       "lines_of_code": <estimate based on file count>,
+                       "dependencies": <actual dependency count>
+                     },
+                     "module_counts": {
+                       "module_name": <file count>,
+                       ...
+                     },
+                     "health_tier": "green|yellow|red"
+                   }
+                
+                8. tree.txt — Professional ASCII tree of the repository structure (use actual structure, do not hallucinate).
+                
+                9. tree.json — Structured hierarchical map:
+                   {
+                     "name": "root",
+                     "type": "directory",
+                     "children": [...]
+                   }
+                
+                10. architecture-graph.json — Interactive graph visualization based on actual module relationships:
+                    {
+                      "nodes": [{"id": "module_name", "label": "Module Name", "type": "module"}],
+                      "edges": [{"source": "parent", "target": "child", "label": "contains"}]
+                    }
 
                 REQUIREMENTS:
-                - Content must be RICH and DETAILED. Avoid placeholders.
-                - Use professional, industrial-grade terminology.
-                - For diagrams, use clean, well-aligned ASCII art.
+                - Content must be FACTUAL and based on the provided repository structure
+                - Avoid placeholders like "Coming soon" - use "To be documented" if info is unavailable
+                - For README.md, ensure ALL 10+ sections are included
+                - Use professional, industrial-grade terminology
+                - For diagrams, use clean, well-aligned ASCII art based on actual structure
                 - DO NOT wrap in markdown code blocks. Output starts with ===FILE: README.md===
 
                 Repository Structure:
@@ -527,16 +619,67 @@ public class LivingWikiService {
                 <file content here>
 
                 Files to generate:
-                1. README.md — Professional overview, tech stack, setup
-                2. adr.md — Formal Architecture Decision Records (at least 5)
-                3. api-reference.md — Exhaustive API endpoint documentation
-                4. architecture.md — Industrial-grade system design & design patterns
-                5. documentation-health.md — Detailed health score (X out of 100)
-                6. api-descriptions.json — Schema-compliant endpoint JSON
-                7. doc_snapshot.json — Project stats and health tier
-                8. tree.txt — Professional ASCII directory tree
-                9. tree.json — Hierarchical map for visual exploration
-                10. architecture-graph.json — Graph nodes and edges for visualization: { "nodes": [{"id": "...", "label": "...", "type": "module"}], "edges": [{"source": "...", "target": "...", "label": "..."}] }
+                
+                1. README.md — Comprehensive project documentation with these REQUIRED sections:
+                   # Project Title
+                   - Clear, descriptive title
+                   - 1-2 sentence description of purpose and problem solved
+                   
+                   ## Table of Contents
+                   - Anchor links to all major sections
+                   
+                   ## Features
+                   - Bulleted list of key features
+                   
+                   ## Tech Stack
+                   - Technologies with versions (e.g., Java 21, Spring Boot 3.2.1)
+                   
+                   ## Installation and Setup
+                   ### Prerequisites
+                   - Required software and versions
+                   ### Installation Steps
+                   - Step-by-step clone and dependency installation
+                   ### Configuration
+                   - Environment variables and config files
+                   
+                   ## Usage Examples
+                   - Code snippets and command examples
+                   
+                   ## Project Structure
+                   - Overview of main directories (use actual structure provided, DO NOT hallucinate)
+                   
+                   ## Contributing
+                   - Guidelines for contributions
+                   
+                   ## License
+                   - License statement
+                   
+                   ## Credits and Acknowledgments
+                   - Contributors and third-party libraries
+                   
+                   ## Support
+                   - How to get help
+                   
+                   ## Project Status
+                   - Development stage and roadmap
+                   
+                   CRITICAL: Base content on actual repository structure. DO NOT invent features or technologies. Use "To be documented" if info is missing.
+                
+                2. adr.md — Architecture Decision Records (at least 5 based on actual code structure)
+                3. api-reference.md — API documentation for endpoints found in code
+                4. architecture.md — System design based on actual implementation
+                5. documentation-health.md — Health score (X out of 100) based on code analysis
+                6. api-descriptions.json — Schema-compliant endpoint JSON from actual controllers
+                7. doc_snapshot.json — {"project_stats": {"files": <count>, "lines_of_code": <estimate>, "dependencies": <count>}, "module_counts": {...}, "health_tier": "green|yellow|red"}
+                8. tree.txt — ASCII tree of actual structure (do not hallucinate)
+                9. tree.json — {"name": "root", "type": "directory", "children": [...]}
+                10. architecture-graph.json — {"nodes": [...], "edges": [...]} based on actual module relationships
+
+                REQUIREMENTS:
+                - Content must be FACTUAL based on provided structure
+                - Avoid hallucination - use "To be documented" when uncertain
+                - README.md must include ALL sections listed above
+                - DO NOT wrap in markdown code blocks
 
                 Repository Structure:
                 """
@@ -597,14 +740,60 @@ public class LivingWikiService {
     private String generateFallbackWiki(String repoUrl, Map<String, Set<String>> modules, int totalFiles,
             int totalDeps) {
         StringBuilder wiki = new StringBuilder();
-        wiki.append("# Project Wiki\n\n");
-        wiki.append("**Repository:** ").append(repoUrl).append("\n\n");
+        
+        // Extract project name from repo URL
+        String projectName = repoUrl.substring(repoUrl.lastIndexOf('/') + 1).replace(".git", "");
+        
+        wiki.append("# ").append(projectName).append("\n\n");
+        wiki.append("> A comprehensive software project managed and analyzed by MindVex\n\n");
+        
+        wiki.append("## Table of Contents\n\n");
+        wiki.append("- [Overview](#overview)\n");
+        wiki.append("- [Features](#features)\n");
+        wiki.append("- [Tech Stack](#tech-stack)\n");
+        wiki.append("- [Installation and Setup](#installation-and-setup)\n");
+        wiki.append("- [Usage Examples](#usage-examples)\n");
+        wiki.append("- [Project Structure](#project-structure)\n");
+        wiki.append("- [Contributing](#contributing)\n");
+        wiki.append("- [License](#license)\n");
+        wiki.append("- [Support](#support)\n");
+        wiki.append("- [Project Status](#project-status)\n\n");
+        
         wiki.append("## Overview\n\n");
+        wiki.append("**Repository:** ").append(repoUrl).append("\n\n");
         wiki.append("This project contains **").append(totalFiles).append(" files** across **")
                 .append(modules.size()).append(" modules** with **")
                 .append(totalDeps).append(" dependency relationships**.\n\n");
-        wiki.append("## Modules\n\n");
-
+        
+        wiki.append("## Features\n\n");
+        wiki.append("- ✅ Modular architecture with ").append(modules.size()).append(" distinct modules\n");
+        wiki.append("- ✅ Comprehensive codebase with ").append(totalFiles).append(" source files\n");
+        wiki.append("- ✅ Well-defined dependency relationships (").append(totalDeps).append(" connections)\n");
+        wiki.append("- ✅ Managed and analyzed by MindVex intelligent code analysis platform\n\n");
+        
+        wiki.append("## Tech Stack\n\n");
+        wiki.append("*To be documented* - Please run full analysis to detect technologies and frameworks used in this project.\n\n");
+        
+        wiki.append("## Installation and Setup\n\n");
+        wiki.append("### Prerequisites\n\n");
+        wiki.append("*To be documented* - Prerequisites will be identified after analyzing package managers and build files.\n\n");
+        wiki.append("### Installation Steps\n\n");
+        wiki.append("```bash\n");
+        wiki.append("# Clone the repository\n");
+        wiki.append("git clone ").append(repoUrl).append("\n");
+        wiki.append("cd ").append(projectName).append("\n\n");
+        wiki.append("# Install dependencies\n");
+        wiki.append("# (Command will be identified based on project type)\n");
+        wiki.append("```\n\n");
+        wiki.append("### Configuration\n\n");
+        wiki.append("*To be documented* - Configuration details will be extracted from config files during analysis.\n\n");
+        
+        wiki.append("## Usage Examples\n\n");
+        wiki.append("*To be documented* - Usage examples will be generated based on entry points and API endpoints found in the code.\n\n");
+        
+        wiki.append("## Project Structure\n\n");
+        wiki.append("The project is organized into the following modules:\n\n");
+        
         for (var entry : modules.entrySet()) {
             wiki.append("### ").append(entry.getKey()).append("\n\n");
             wiki.append("Contains ").append(entry.getValue().size()).append(" files:\n\n");
@@ -614,6 +803,38 @@ public class LivingWikiService {
             }
             wiki.append("\n");
         }
+        
+        wiki.append("## Contributing\n\n");
+        wiki.append("Contributions are welcome! Please follow these guidelines:\n\n");
+        wiki.append("1. Fork the repository\n");
+        wiki.append("2. Create a feature branch (`git checkout -b feature/amazing-feature`)\n");
+        wiki.append("3. Commit your changes (`git commit -m 'Add amazing feature'`)\n");
+        wiki.append("4. Push to the branch (`git push origin feature/amazing-feature`)\n");
+        wiki.append("5. Open a Pull Request\n\n");
+        
+        wiki.append("## License\n\n");
+        wiki.append("*To be documented* - License information will be extracted from LICENSE file if present.\n\n");
+        
+        wiki.append("## Credits and Acknowledgments\n\n");
+        wiki.append("- **Analysis Platform**: [MindVex](https://github.com/hariPrasathK-Dev/MindVex_Editor_Frontend)\n");
+        wiki.append("- **Contributors**: To be documented\n");
+        wiki.append("- **Third-party Libraries**: To be identified during dependency analysis\n\n");
+        
+        wiki.append("## Support\n\n");
+        wiki.append("For questions and support:\n\n");
+        wiki.append("- 📝 Create an issue in the [issue tracker](").append(repoUrl.replace(".git", "/issues")).append(")\n");
+        wiki.append("- 💬 Check existing discussions for common questions\n\n");
+        
+        wiki.append("## Project Status\n\n");
+        wiki.append("🔄 **Active Development** - This project is being actively analyzed and documented.\n\n");
+        wiki.append("### Roadmap\n\n");
+        wiki.append("- [ ] Complete dependency analysis\n");
+        wiki.append("- [ ] Generate comprehensive API documentation\n");
+        wiki.append("- [ ] Identify and document all tech stack components\n");
+        wiki.append("- [ ] Create architecture diagrams\n");
+        wiki.append("- [ ] Document configuration and deployment procedures\n\n");
+        wiki.append("---\n\n");
+        wiki.append("*This documentation was auto-generated by MindVex. For comprehensive documentation, please run a full Living Wiki generation with an AI provider configured.*\n");
 
         return wiki.toString();
     }
