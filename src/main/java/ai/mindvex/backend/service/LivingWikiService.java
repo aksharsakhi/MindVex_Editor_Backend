@@ -1,7 +1,9 @@
 package ai.mindvex.backend.service;
 
+import ai.mindvex.backend.entity.User;
 import ai.mindvex.backend.entity.VectorEmbedding;
 import ai.mindvex.backend.repository.FileDependencyRepository;
+import ai.mindvex.backend.repository.UserRepository;
 import ai.mindvex.backend.repository.VectorEmbeddingRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +34,8 @@ public class LivingWikiService {
     private final FileDependencyRepository depRepo;
     private final VectorEmbeddingRepository embeddingRepo;
     private final EmbeddingIngestionService embeddingService;
+    private final UserRepository userRepository;
+    private final GitHubApiService githubApiService;
     private final RestTemplate restTemplate = new RestTemplate();
 
     @Value("${gemini.api-key:#{null}}")
@@ -148,6 +152,89 @@ public class LivingWikiService {
         if (semanticContext.length() > 0) {
             context.append("\nRelevant Code Samples (from semantic analysis):\n");
             context.append(semanticContext.toString());
+        }
+
+        // ─── GitHub Architecture Decision Context ──────────────────────────
+        // Fetch architectural decisions from GitHub (commits, PRs, issues)
+        String githubToken = getUserGithubToken(userId);
+        if (githubToken != null && !githubToken.isBlank()) {
+            try {
+                log.info("[LivingWiki] Fetching architecture context from GitHub");
+                GitHubApiService.ArchitectureContext archContext = 
+                    githubApiService.fetchArchitectureContext(repoUrl, githubToken);
+
+                if (!archContext.isEmpty()) {
+                    context.append("\n─── GitHub Architecture Decision Records ───\n\n");
+                    
+                    // Add architectural commits
+                    if (!archContext.getCommits().isEmpty()) {
+                        context.append("## Architectural Commits\n");
+                        context.append("Recent commits with architectural significance:\n\n");
+                        archContext.getCommits().stream().limit(10).forEach(commit -> {
+                            context.append(String.format("- **%s** (%s)\n",
+                                commit.getMessage().split("\n")[0], // First line only
+                                commit.getDate() != null ? commit.getDate().substring(0, 10) : "unknown"));
+                            context.append(String.format("  Author: %s | URL: %s\n",
+                                commit.getAuthor(), commit.getUrl()));
+                        });
+                        context.append("\n");
+                    }
+
+                    // Add architectural pull requests
+                    if (!archContext.getPullRequests().isEmpty()) {
+                        context.append("## Architectural Pull Requests\n");
+                        context.append("Pull requests discussing design decisions:\n\n");
+                        archContext.getPullRequests().stream().limit(8).forEach(pr -> {
+                            context.append(String.format("- **PR #%d: %s** [%s]\n",
+                                pr.getNumber(), pr.getTitle(), pr.getState()));
+                            if (!pr.getLabels().isEmpty()) {
+                                context.append(String.format("  Labels: %s\n",
+                                    String.join(", ", pr.getLabels())));
+                            }
+                            if (pr.getBody() != null && !pr.getBody().isBlank()) {
+                                String description = pr.getBody().length() > 150 
+                                    ? pr.getBody().substring(0, 150) + "..." 
+                                    : pr.getBody();
+                                context.append(String.format("  Description: %s\n", description));
+                            }
+                            context.append(String.format("  URL: %s\n", pr.getUrl()));
+                        });
+                        context.append("\n");
+                    }
+
+                    // Add architectural issues
+                    if (!archContext.getIssues().isEmpty()) {
+                        context.append("## Architectural Issues & Discussions\n");
+                        context.append("Issues discussing architecture and design:\n\n");
+                        archContext.getIssues().stream().limit(8).forEach(issue -> {
+                            context.append(String.format("- **Issue #%d: %s** [%s]\n",
+                                issue.getNumber(), issue.getTitle(), issue.getState()));
+                            if (!issue.getLabels().isEmpty()) {
+                                context.append(String.format("  Labels: %s\n",
+                                    String.join(", ", issue.getLabels())));
+                            }
+                            if (issue.getBody() != null && !issue.getBody().isBlank()) {
+                                String description = issue.getBody().length() > 150
+                                    ? issue.getBody().substring(0, 150) + "..."
+                                    : issue.getBody();
+                                context.append(String.format("  Description: %s\n", description));
+                            }
+                            context.append(String.format("  URL: %s\n", issue.getUrl()));
+                        });
+                        context.append("\n");
+                    }
+
+                    log.info("[LivingWiki] Added GitHub architecture context ({} commits, {} PRs, {} issues)",
+                        archContext.getCommits().size(), 
+                        archContext.getPullRequests().size(),
+                        archContext.getIssues().size());
+                }
+
+            } catch (Exception e) {
+                log.warn("[LivingWiki] Could not fetch GitHub architecture context: {}", e.getMessage());
+            }
+        } else {
+            log.info("[LivingWiki] No GitHub token available, skipping architecture context from GitHub");
         }
 
         if (provider != null) {
@@ -433,7 +520,71 @@ public class LivingWikiService {
                    
                    CRITICAL: Base ALL content on the actual repository structure provided below. DO NOT invent features, dependencies, or technologies that aren't evident in the structure. If information is missing, state "To be documented" rather than hallucinating.
                 
-                2. adr.md — Formal Architecture Decision Records. Document at least 5 key decisions with status, context, decision, and consequences. Base decisions on actual code structure.
+                2. adr.md — Architecture Decision Records (ADRs)
+                   
+                   **CRITICAL: Use the GitHub Architecture Decision Records section below (if provided) to create factual ADRs based on actual commits, pull requests, and issues.**
+                   
+                   Document at least 5-10 key architectural decisions using this format for EACH decision:
+                   
+                   ### ADR-###: [Decision Title]
+                   
+                   **Status:** Accepted | Proposed | Deprecated | Superseded
+                   
+                   **Context:**
+                   - What is the situation/problem requiring a decision?
+                   - What constraints exist (technical, business, time)?
+                   - When was this decision made? (Use GitHub commit/PR dates if available)
+                   - Who proposed it? (Use GitHub authors if available)
+                   
+                   **Decision:**
+                   - What was decided? Be specific and concrete.
+                   - What alternatives were considered?
+                   - Why was this chosen over alternatives?
+                   
+                   **Consequences:**
+                   - **Positive:**
+                     - Benefits gained
+                     - Non-functional requirements addressed (security, performance, scalability)
+                   - **Negative:**
+                     - Trade-offs accepted
+                     - Technical debt incurred
+                     - Maintenance overhead
+                   - **Risks:**
+                     - Potential future issues
+                     - Migration challenges
+                   
+                   **References:**
+                   - Link to GitHub commits, PRs, or issues if mentioned in the GitHub ADR section
+                   - Link to documentation or RFCs
+                   
+                   ---
+                   
+                   **When to create an ADR (include these if evident in GitHub history):**
+                   1. Multiple technical options were considered
+                   2. Decision impacts future development (breaking changes, migrations)
+                   3. Decision affects non-functional requirements (security, performance, scalability)
+                   4. Decision affects multiple teams or systems
+                   5. Framework/library choice or version upgrade
+                   6. Database schema changes or migration
+                   7. API design or breaking changes
+                   8. Architecture pattern adoption (microservices, event-driven, etc.)
+                   
+                   **Example ADR Topics to Look For:**
+                   - Framework choice (e.g., "Why React over Vue", "Why Spring Boot over Express")
+                   - Database decisions (e.g., "Migration from MySQL to PostgreSQL")
+                   - Architecture patterns (e.g., "Adopting microservices", "Implementing CQRS")
+                   - Security implementations (e.g., "OAuth2 vs JWT authentication")
+                   - Performance optimizations (e.g., "Adding Redis cache layer")
+                   - Breaking changes (e.g., "API versioning strategy", "Refactoring to REST from GraphQL")
+                   
+                   IMPORTANT: Base ADRs on actual evidence from:
+                   - GitHub commits with keywords like "refactor", "breaking change", "migration", "architecture"
+                   - GitHub PRs discussing design decisions
+                   - GitHub issues about architectural choices
+                   - Code structure patterns visible in the repository
+                   
+                   If no GitHub data is available, infer decisions from code structure only. DO NOT hallucinate decisions.
+                
                 
                 3. api-reference.md — API documentation. For endpoints/services evident in the code, include base URL, auth, parameter tables, example requests/responses, and error codes.
                 
@@ -665,7 +816,24 @@ public class LivingWikiService {
                    
                    CRITICAL: Base content on actual repository structure. DO NOT invent features or technologies. Use "To be documented" if info is missing.
                 
-                2. adr.md — Architecture Decision Records (at least 5 based on actual code structure)
+                2. adr.md — Architecture Decision Records
+                   **USE GitHub Architecture Decision Records section (if provided) to create factual ADRs from actual commits/PRs/issues.**
+                   
+                   Format each ADR as:
+                   ### ADR-###: [Decision Title]
+                   **Status:** Accepted|Proposed|Deprecated
+                   **Context:** Problem, constraints, when/who (use GitHub data if available)
+                   **Decision:** What was decided, why chosen over alternatives
+                   **Consequences:**
+                   - Positive: Benefits, NFR improvements (security, performance, scalability)
+                   - Negative: Trade-offs, technical debt, maintenance overhead
+                   - Risks: Future issues, migration challenges
+                   **References:** Link to GitHub commits/PRs/issues if mentioned
+                   
+                   Include ADRs for: framework choice, database decisions, architecture patterns, security implementations, performance optimizations, breaking changes
+                   Base on GitHub commits/PRs/issues with keywords: refactor, breaking change, migration, architecture, decision
+                   If no GitHub data, infer from code structure only. DO NOT hallucinate.
+                   
                 3. api-reference.md — API documentation for endpoints found in code
                 4. architecture.md — System design based on actual implementation
                 5. documentation-health.md — Health score (X out of 100) based on code analysis
@@ -835,7 +1003,20 @@ public class LivingWikiService {
         wiki.append("- [ ] Document configuration and deployment procedures\n\n");
         wiki.append("---\n\n");
         wiki.append("*This documentation was auto-generated by MindVex. For comprehensive documentation, please run a full Living Wiki generation with an AI provider configured.*\n");
-
+        
         return wiki.toString();
+    }
+
+    /**
+     * Fetch user's GitHub access token from the database.
+     * Returns null if user not found or token not set.
+     * 
+     * @param userId User ID
+     * @return GitHub access token or null
+     */
+    private String getUserGithubToken(Long userId) {
+        return userRepository.findById(userId)
+                .map(User::getGithubAccessToken)
+                .orElse(null);
     }
 }
