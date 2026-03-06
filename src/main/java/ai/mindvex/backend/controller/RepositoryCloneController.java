@@ -5,6 +5,7 @@ import ai.mindvex.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -59,20 +60,8 @@ public class RepositoryCloneController {
             log.info("[Clone] Cloning into temporary directory: {}", tempDir);
 
             try {
-                // Clone the repository using JGit
-                var cloneCmd = Git.cloneRepository()
-                        .setURI(request.url())
-                        .setDirectory(tempDir.toFile())
-                        .setDepth(1); // shallow clone
-
-                // Add authentication if available
-                if (githubToken != null && !githubToken.isBlank()) {
-                    log.info("[Clone] Using GitHub authentication");
-                    cloneCmd.setCredentialsProvider(
-                            new UsernamePasswordCredentialsProvider("oauth2", githubToken));
-                }
-
-                Git git = cloneCmd.call();
+                // Clone with retry logic
+                Git git = cloneWithRetry(request.url(), tempDir, githubToken, 3);
                 git.close();
 
                 log.info("[Clone] Repository cloned successfully");
@@ -121,6 +110,62 @@ public class RepositoryCloneController {
                     "Failed to clone repository: " + errorMessage,
                     null,
                     null));
+        }
+    }
+
+    /**
+     * Clone repository with retry logic and exponential backoff.
+     */
+    private Git cloneWithRetry(String repoUrl, Path targetDir, String accessToken, int maxAttempts) 
+            throws IOException {
+        int attempt = 0;
+        Exception lastException = null;
+
+        while (attempt < maxAttempts) {
+            attempt++;
+            try {
+                log.info("[Clone] Attempt {}/{} for {}", attempt, maxAttempts, repoUrl);
+
+                var cloneCmd = Git.cloneRepository()
+                        .setURI(repoUrl)
+                        .setDirectory(targetDir.toFile())
+                        .setDepth(1)
+                        .setTimeout(300); // 5 minutes timeout
+
+                if (accessToken != null && !accessToken.isBlank()) {
+                    log.info("[Clone] Using GitHub authentication");
+                    cloneCmd.setCredentialsProvider(
+                        new UsernamePasswordCredentialsProvider("oauth2", accessToken)
+                    );
+                }
+
+                Git git = cloneCmd.call();
+                log.info("[Clone] Successfully cloned {} on attempt {}", repoUrl, attempt);
+                return git;
+
+            } catch (GitAPIException e) {
+                lastException = e;
+                log.warn("[Clone] Attempt {}/{} failed: {}", attempt, maxAttempts, e.getMessage());
+
+                if (attempt < maxAttempts) {
+                    long waitTime = (long) Math.pow(2, attempt) * 1000;
+                    log.info("[Clone] Waiting {}ms before retry...", waitTime);
+                    try {
+                        Thread.sleep(waitTime);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException("Clone interrupted", ie);
+                    }
+                }
+            }
+        }
+
+        // All attempts failed
+        log.error("[Clone] All {} attempts failed for {}", maxAttempts, repoUrl);
+        if (lastException != null) {
+            throw new IOException("Clone failed after " + maxAttempts + " attempts: " + lastException.getMessage(), lastException);
+        } else {
+            throw new IOException("Clone failed after " + maxAttempts + " attempts");
         }
     }
 

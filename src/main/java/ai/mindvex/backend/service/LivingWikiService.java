@@ -77,27 +77,37 @@ public class LivingWikiService {
                 log.info("[LivingWiki] Retrieving semantic context via embeddings (count={})", embeddingCount);
 
                 // Multi-aspect semantic search for comprehensive understanding
+                // REDUCED queries and chunks to avoid "Payload Too Large" errors
                 String[] queries = {
-                        "main entry point, startup, initialization, configuration",
-                        "API endpoints, routes, controllers, request handlers",
-                        "data models, entities, database schema, repositories",
-                        "business logic, services, core functionality, algorithms",
-                        "authentication, authorization, security, validation"
+                        "main entry point, startup, initialization",
+                        "API endpoints, routes, controllers",
+                        "data models, entities, database schema"
                 };
 
                 Set<String> seenChunks = new HashSet<>();
                 int totalChunks = 0;
+                int maxTotalChunks = 10; // Limit total chunks to avoid token overflow
+                int maxChunkLength = 500; // Truncate long chunks
 
                 for (String query : queries) {
+                    if (totalChunks >= maxTotalChunks) break; // Stop if limit reached
+                    
                     try {
-                        List<VectorEmbedding> chunks = embeddingService.semanticSearch(userId, repoUrl, query, 5);
+                        List<VectorEmbedding> chunks = embeddingService.semanticSearch(userId, repoUrl, query, 2);
                         for (VectorEmbedding chunk : chunks) {
+                            if (totalChunks >= maxTotalChunks) break;
+                            
                             String chunkId = chunk.getFilePath() + ":" + chunk.getChunkIndex();
                             if (!seenChunks.contains(chunkId)) {
                                 seenChunks.add(chunkId);
+                                String chunkText = chunk.getChunkText();
+                                // Truncate long chunks to save tokens
+                                if (chunkText.length() > maxChunkLength) {
+                                    chunkText = chunkText.substring(0, maxChunkLength) + "...";
+                                }
                                 semanticContext.append("\n// ").append(chunk.getFilePath())
                                         .append(" (chunk ").append(chunk.getChunkIndex()).append(")\n")
-                                        .append(chunk.getChunkText()).append("\n");
+                                        .append(chunkText).append("\n");
                                 totalChunks++;
                             }
                         }
@@ -106,7 +116,8 @@ public class LivingWikiService {
                     }
                 }
 
-                log.info("[LivingWiki] Retrieved {} unique code chunks for semantic context", totalChunks);
+                log.info("[LivingWiki] Retrieved {} unique code chunks (max {}) for semantic context", 
+                        totalChunks, maxTotalChunks);
             } catch (Exception e) {
                 log.warn("[LivingWiki] Could not retrieve semantic context: {}", e.getMessage());
             }
